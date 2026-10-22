@@ -17,6 +17,7 @@ Target: `jerrydetector.com`, eventually routed to a Jetson Orin Nano at home. Ho
 | `src/jerry/pipeline.py` | One thread per camera: read, detect, clip; idle and spot-check off hours |
 | `src/jerry/stream.py` | OpenCV frame reader: sampling, downscaling, stream timestamps |
 | `src/jerry/schedule.py` | Operating hours and random spot-check timing |
+| `src/jerry/scene.py` | PTZ scene-change gate in front of the crash rule |
 | `src/jerry/store.py` | GIF + JSON metadata writer and reader |
 | `src/jerry/web/` | FastAPI app and static page |
 | `src/jerry/cli.py` | `jerry run` and `jerry serve` |
@@ -38,7 +39,7 @@ A video file works as a camera `source` for testing. It replays when it ends.
 
 - Use JetPack's PyTorch and OpenCV builds. The pip `opencv-python-headless` wheel has no CUDA or GStreamer.
 - Export the model to TensorRT once, then point `detector.model` at the `.engine` file:
-  `yolo export model=yolo11n-pose.pt format=engine half=True device=0`
+  `yolo export model=yolo11n-pose.pt format=engine half=True device=0 imgsz=1920`
 - Set `detector.device: 0`.
 
 ## Domain (later)
@@ -58,7 +59,7 @@ home NAT is a Cloudflare Tunnel, or a DNS record to your public IP with port for
 
 - The relay answers the default FFmpeg/curl User-Agent with `405`. OpenCV reads the feeds fine once `OPENCV_FFMPEG_CAPTURE_OPTIONS=user_agent;...` is set. On Windows that must go through `msvcrt._putenv`, because OpenCV's FFmpeg plugin ignores `os.environ`; `stream.py` handles it.
 - Both are 1080p H.264 at ~30fps with discontinuity markers. OpenCV delivers HLS in segment-sized bursts, so frames are sampled by counting against the stream fps and timestamped by stream position, not arrival time.
-- Both cameras are PTZ and tour between presets every few seconds, so the view changes constantly. The crash rule does not account for this yet.
+- Both cameras are PTZ and tour between presets every few seconds. `scene.py` watches how much of the picture changes between sampled frames; past `rule.scene_change_fraction` the view counts as moving, detection is skipped for `rule.settle_seconds`, and the rule's "down" timer resets so a skier in one preset cannot complete a crash in the next.
 
 ## Operating hours
 

@@ -13,7 +13,7 @@ cameras:
   #   source: rtsp://user:pass@192.168.1.50:554/stream1
 
 stream:
-  frame_width: 960            # frames are downscaled to this width before detection
+  frame_width: 1920           # native 1080p; frames wider than this are downscaled
   timeout_seconds: 15.0       # drop and reconnect if the network stalls this long
   # user_agent: ...           # the relay returns 405 to the default ffmpeg/curl agent
 
@@ -30,11 +30,14 @@ detector:
   model: yolo11n-pose.pt      # or a TensorRT .engine exported on the Jetson
   device: cpu                 # cpu | cuda | 0 (Jetson GPU)
   confidence: 0.4
+  imgsz: 1920                 # model input size; a TensorRT .engine must be exported at the same size
 
 rule:                         # crash heuristic; tune on real footage
   horizontal_ratio: 1.3       # box width/height at or above this counts as "down"
   hold_seconds: 1.0           # must stay down this long
   cooldown_seconds: 60.0      # minimum gap between clips per camera
+  scene_change_fraction: 0.03 # share of pixels changing per sampled frame that means the PTZ camera moved
+  settle_seconds: 1.5         # ignore this long after a move (blurry frames, new view)
 
 clip:
   fps: 5                      # frames sampled per second; also GIF playback rate

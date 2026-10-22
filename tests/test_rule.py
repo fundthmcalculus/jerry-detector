@@ -31,3 +31,11 @@ def test_getting_up_resets_hold():
     rule.update([UPRIGHT], 0.5)
     assert not rule.update([FLAT], 1.2)  # hold started again at 1.2
     assert rule.update([FLAT], 2.2)
+
+
+def test_reset_drops_in_progress_hold():
+    rule = CrashRule(1.3, 1.0, 10.0)
+    rule.update([FLAT], 0.0)
+    rule.reset()  # camera moved
+    assert not rule.update([FLAT], 1.2)  # hold starts over, not carried from t=0
+    assert rule.update([FLAT], 2.2)

@@ -37,18 +37,20 @@ class YoloPoseDetector:
         yolo export model=yolo11n-pose.pt format=engine half=True device=0
     """
 
-    def __init__(self, model: str, device: str, confidence: float) -> None:
+    def __init__(self, model: str, device: str, confidence: float, imgsz: int) -> None:
         from ultralytics import YOLO  # optional dependency: pip install -e ".[ml]"
 
         self._model = YOLO(model)
         self._device = device
         self._confidence = confidence
+        self._imgsz = imgsz
 
     def detect(self, frame: np.ndarray) -> list[Person]:
         result = self._model.predict(
             frame,
             classes=[0],
             conf=self._confidence,
+            imgsz=self._imgsz,
             device=self._device,
             verbose=False,
         )[0]
@@ -69,5 +71,5 @@ def make_detector(cfg: DetectorConfig) -> PersonDetector:
     if cfg.backend == "none":
         return NullDetector()
     if cfg.backend == "yolo_pose":
-        return YoloPoseDetector(cfg.model, cfg.device, cfg.confidence)
+        return YoloPoseDetector(cfg.model, cfg.device, cfg.confidence, cfg.imgsz)
     raise ValueError(f"unknown detector backend: {cfg.backend!r}")

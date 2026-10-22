@@ -13,6 +13,7 @@ from jerry.clip import ClipBuffer
 from jerry.config import CameraConfig, Config
 from jerry.detect import PersonDetector
 from jerry.rule import CrashRule
+from jerry.scene import SceneMonitor
 from jerry.schedule import OperatingHours, next_spot_check_delay
 from jerry.store import ClipStore
 from jerry.stream import FrameReader, open_reader
@@ -71,6 +72,7 @@ class CameraWorker(threading.Thread):
             return
         rule = CrashRule(self._cfg.rule.horizontal_ratio, self._cfg.rule.hold_seconds, self._cfg.rule.cooldown_seconds)
         buffer = ClipBuffer(self._cfg.clip.pre_seconds, self._cfg.clip.post_seconds)
+        scene = SceneMonitor(self._cfg.rule.scene_change_fraction, self._cfg.rule.settle_seconds)
         try:
             while not self._stop_event.is_set():
                 item = reader.read()
@@ -81,15 +83,21 @@ class CameraWorker(threading.Thread):
                     log.info("%s: closing time, pausing", self.camera.name)
                     return
                 now, bgr = item
-                self._process(now, bgr, rule, buffer)
+                self._process(now, bgr, rule, buffer, scene)
         finally:
             reader.close()
 
-    def _process(self, now: float, bgr: np.ndarray, rule: CrashRule, buffer: ClipBuffer) -> None:
-        people = self._detector.detect(bgr)
-        if rule.update(people, now):
-            log.info("%s: crash detected", self.camera.name)
-            buffer.trigger(now)
+    def _process(
+        self, now: float, bgr: np.ndarray, rule: CrashRule, buffer: ClipBuffer, scene: SceneMonitor
+    ) -> None:
+        # A PTZ move shifts the whole picture: no detection on it, and a skier "down" in the
+        # old view must not carry over into the new one.
+        if scene.update(now, bgr):
+            if rule.update(self._detector.detect(bgr), now):
+                log.info("%s: crash detected", self.camera.name)
+                buffer.trigger(now)
+        else:
+            rule.reset()
 
         clip = buffer.push(now, self._for_gif(bgr))
         if clip is not None:

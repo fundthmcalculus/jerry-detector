@@ -17,6 +17,10 @@ class CrashRule:
         self._down_since: float | None = None
         self._last_fired = float("-inf")
 
+    def reset(self) -> None:
+        """Forget any in-progress "down" hold, e.g. because the camera moved to a new view."""
+        self._down_since = None
+
     def update(self, people: list[Person], now: float) -> bool:
         """Feed one frame's detections. Returns True when a crash fires."""
         subject = max(people, key=lambda p: p.width * p.height, default=None)

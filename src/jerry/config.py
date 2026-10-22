@@ -19,6 +19,7 @@ class DetectorConfig:
     model: str = "yolo11n-pose.pt"
     device: str = "cpu"
     confidence: float = 0.4
+    imgsz: int = 1920  # model input size; match frame_width, or YOLO downsizes to this
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,8 @@ class RuleConfig:
     horizontal_ratio: float = 1.3
     hold_seconds: float = 1.0
     cooldown_seconds: float = 60.0
+    scene_change_fraction: float = 0.03  # PTZ view change: skip detection and reset the hold
+    settle_seconds: float = 1.5  # keep skipping this long after a view change
 
 
 @dataclass(frozen=True)
@@ -42,7 +45,7 @@ class StreamConfig:
     """How camera sources are read."""
 
     user_agent: str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
-    frame_width: int = 960  # frames are downscaled to this width before detection
+    frame_width: int = 1920  # frames are downscaled to at most this width (1920 = native 1080p)
     timeout_seconds: float = 15.0  # network read stall limit
 
 

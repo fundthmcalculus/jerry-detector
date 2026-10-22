@@ -6,3 +6,5 @@ config.yaml
 clips/
 *.pt
 *.engine
+*.onnx
+models/
