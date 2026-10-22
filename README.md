@@ -32,6 +32,18 @@ pytest
 
 A video file works as a camera `source` for testing. It replays when it ends.
 
+### Local runbook (live feeds)
+
+1. Replace the `<AREA_CAM_ID>` and `<RED_CAM_ID>` placeholders in `config.yaml`.
+2. `jerry probe` opens each enabled camera, reads frames, and reports resolution and fps. Fix any `FAIL` before going further.
+3. `jerry run -v` starts detection. Clips land in `clips/`.
+4. `jerry serve` in another terminal, then open http://127.0.0.1:8000.
+
+Notes:
+- HLS (`.m3u8`) is read through OpenCV's FFmpeg backend. The pip wheel includes FFmpeg.
+- Each camera holds one connection and reconnects every 5 seconds after a drop.
+- Check the provider's terms before running automated reads.
+
 ## Jetson Orin Nano
 
 - Use JetPack's PyTorch and OpenCV builds. The pip `opencv-python-headless` wheel has no CUDA or GStreamer.

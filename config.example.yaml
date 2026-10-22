@@ -1,9 +1,14 @@
 # Copy to config.yaml (gitignored) and edit.
 
 cameras:
-  - name: north-bowl
-    source: rtsp://user:pass@192.168.1.50:554/stream1   # RTSP, HTTP/MJPEG, or a video file path
+  # HLS playlists work directly (.m3u8). Replace the placeholder IDs.
+  - name: area-cam
+    source: https://b15.hdrelay.com/camera/<AREA_CAM_ID>/relay/playlist.m3u8
     enabled: true
+  - name: red-cam
+    source: https://b15.hdrelay.com/camera/<RED_CAM_ID>/relay/playlist.m3u8
+    enabled: true
+  # Also supported: rtsp://user:pass@host:554/stream, MJPEG URLs, or a video file path.
 
 detector:
   backend: yolo_pose          # yolo_pose | none

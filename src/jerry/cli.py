@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import logging
 import threading
+import time
 from pathlib import Path
 
+from jerry.capture import open_capture
 from jerry.config import load_config
 from jerry.detect import make_detector
 from jerry.pipeline import CameraWorker
@@ -37,6 +39,40 @@ def run_detection(config_path: Path) -> None:
         stop.set()
 
 
+def probe(config_path: Path, frames: int) -> bool:
+    """Open each enabled camera, read a few frames, and report what came back."""
+    cfg = load_config(config_path)
+    all_ok = True
+    for cam in cfg.cameras:
+        if not cam.enabled:
+            continue
+        cap = open_capture(cam.source)
+        if not cap.isOpened():
+            print(f"FAIL  {cam.name}: could not open source")
+            all_ok = False
+            cap.release()
+            continue
+        start = time.monotonic()
+        got = 0
+        shape = None
+        for _ in range(frames):
+            ok, frame = cap.read()
+            if not ok:
+                break
+            got += 1
+            shape = frame.shape
+        elapsed = time.monotonic() - start
+        cap.release()
+        if got == 0:
+            print(f"FAIL  {cam.name}: opened but no frames")
+            all_ok = False
+        else:
+            h, w = shape[:2]
+            fps = got / elapsed if elapsed > 0 else float("nan")
+            print(f"OK    {cam.name}: {w}x{h}, read {got}/{frames} frames at {fps:.1f} fps")
+    return all_ok
+
+
 def serve_web(config_path: Path, host: str, port: int) -> None:
     import uvicorn
 
@@ -54,6 +90,9 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("run", help="watch cameras and save crash clips")
 
+    check = sub.add_parser("probe", help="check each camera opens and delivers frames")
+    check.add_argument("--frames", type=int, default=30)
+
     serve = sub.add_parser("serve", help="serve the clip website")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -66,6 +105,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "run":
         run_detection(args.config)
+    elif args.cmd == "probe":
+        raise SystemExit(0 if probe(args.config, args.frames) else 1)
     else:
         serve_web(args.config, args.host, args.port)
 

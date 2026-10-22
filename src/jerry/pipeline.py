@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import cv2
 import numpy as np
 
+from jerry.capture import open_capture
 from jerry.clip import ClipBuffer
 from jerry.config import CameraConfig, Config
 from jerry.detect import PersonDetector
@@ -42,7 +43,7 @@ class CameraWorker(threading.Thread):
 
     def run(self) -> None:
         while not self._stop.is_set():
-            cap = cv2.VideoCapture(self.camera.source)
+            cap = open_capture(self.camera.source)
             if cap.isOpened():
                 log.info("%s: connected", self.camera.name)
                 try:
