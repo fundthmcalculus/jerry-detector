@@ -73,14 +73,15 @@ class CameraWorker(threading.Thread):
         buffer = ClipBuffer(self._cfg.clip.pre_seconds, self._cfg.clip.post_seconds)
         try:
             while not self._stop_event.is_set():
-                bgr = reader.read()
-                if bgr is None:
+                item = reader.read()
+                if item is None:
                     log.warning("%s: stream ended or dropped", self.camera.name)
                     return
                 if not self._hours.is_open(self._hours.now()):
                     log.info("%s: closing time, pausing", self.camera.name)
                     return
-                self._process(time.monotonic(), bgr, rule, buffer)
+                now, bgr = item
+                self._process(now, bgr, rule, buffer)
         finally:
             reader.close()
 
@@ -125,11 +126,11 @@ class CameraWorker(threading.Thread):
         frames = max_people = 0
         try:
             while time.monotonic() < deadline and not self._stop_event.is_set():
-                bgr = reader.read()
-                if bgr is None:
+                item = reader.read()
+                if item is None:
                     break
                 frames += 1
-                max_people = max(max_people, len(self._detector.detect(bgr)))
+                max_people = max(max_people, len(self._detector.detect(item[1])))
         finally:
             reader.close()
 

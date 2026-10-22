@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import ctypes
 import logging
-import subprocess
-import threading
+import os
+import sys
 import time
 from typing import Protocol
 from urllib.parse import urlparse
@@ -16,120 +17,81 @@ log = logging.getLogger(__name__)
 
 
 class FrameReader(Protocol):
-    def read(self) -> np.ndarray | None:
-        """Next BGR frame at the sampling rate, or None when the stream ended or dropped."""
+    def read(self) -> tuple[float, np.ndarray] | None:
+        """Next (stream_seconds, BGR frame) at the sampling rate, or None when the stream ended or dropped.
+
+        Time is the frame's position in the stream, not arrival time: HLS arrives in bursts."""
         ...
 
     def close(self) -> None: ...
 
 
-def is_http_stream(source: str) -> bool:
-    return urlparse(source).scheme in ("http", "https")
+def _set_capture_options(user_agent: str) -> None:
+    """Make OpenCV's FFmpeg send `user_agent`; the camera relay answers its default `Lavf` one with 405.
 
-
-class FfmpegReader:
-    """Reads an HTTP/HLS stream through an ffmpeg subprocess, already sampled and downscaled.
-
-    OpenCV's bundled FFmpeg can't set the User-Agent, and the camera relay answers its
-    default `Lavf` one with 405. Going through ffmpeg also gives reconnects, a read timeout,
-    and keeps only the video stream (the feeds carry an extra timed-ID3 data stream).
+    OpenCV reads OPENCV_FFMPEG_CAPTURE_OPTIONS from the C runtime's environment. On Windows the
+    FFmpeg plugin (a MinGW build linked to msvcrt.dll) has its own copy that `os.environ` does not
+    update, so also call msvcrt._putenv.
     """
-
-    def __init__(self, source: str, fps: float, cfg: StreamConfig) -> None:
-        width, height = _scaled_size(_probe_size(source, cfg), cfg.frame_width)
-        self._shape = (height, width, 3)
-        self._frame_bytes = height * width * 3
-        timeout_us = str(int(cfg.timeout_seconds * 1_000_000))
-        self._proc = subprocess.Popen(
-            [
-                cfg.ffmpeg, "-hide_banner", "-loglevel", "warning", "-nostdin",
-                "-user_agent", cfg.user_agent,
-                "-rw_timeout", timeout_us,
-                "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
-                "-i", source,
-                "-map", "0:v:0", "-an", "-sn", "-dn",
-                "-vf", f"fps={fps},scale={width}:{height}",
-                "-pix_fmt", "bgr24", "-f", "rawvideo", "-",
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        threading.Thread(target=self._log_stderr, args=(source,), daemon=True).start()
-
-    def read(self) -> np.ndarray | None:
-        data = self._proc.stdout.read(self._frame_bytes)
-        if len(data) < self._frame_bytes:
-            return None
-        return np.frombuffer(data, dtype=np.uint8).reshape(self._shape)
-
-    def close(self) -> None:
-        self._proc.kill()
-        self._proc.wait()
-        self._proc.stdout.close()
-
-    def _log_stderr(self, source: str) -> None:
-        for line in self._proc.stderr:
-            if b"deprecated pixel format" in line:  # harmless: feeds are full-range yuvj420p
-                continue
-            log.warning("ffmpeg[%s]: %s", _redact(source), line.decode(errors="replace").rstrip())
+    value = f"user_agent;{user_agent}"
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = value
+    if sys.platform == "win32":
+        ctypes.CDLL("msvcrt")._putenv(f"OPENCV_FFMPEG_CAPTURE_OPTIONS={value}".encode())
 
 
 class CvReader:
-    """OpenCV capture for RTSP and files, throttled to the sampling rate."""
+    """OpenCV capture (HLS/HTTP, RTSP or a file), throttled to the sampling rate and downscaled."""
 
-    def __init__(self, source: str, fps: float) -> None:
-        self._cap = cv2.VideoCapture(source)
+    def __init__(self, source: str, fps: float, cfg: StreamConfig) -> None:
+        _set_capture_options(cfg.user_agent)
+        timeout_ms = int(cfg.timeout_seconds * 1000)
+        self._cap = cv2.VideoCapture(
+            source,
+            cv2.CAP_FFMPEG,
+            [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, timeout_ms, cv2.CAP_PROP_READ_TIMEOUT_MSEC, timeout_ms],
+        )
         if not self._cap.isOpened():
             self._cap.release()
             raise OSError(f"could not open {_redact(source)}")
+        self._width = cfg.frame_width
+        # Sample by counting frames: HLS arrives a segment at a time in bursts, so a wall-clock
+        # throttle would keep one frame per burst. Fall back to wall-clock if the rate is unknown.
+        source_fps = self._cap.get(cv2.CAP_PROP_FPS)
+        self._source_fps = source_fps
+        self._step = max(1, round(source_fps / fps)) if source_fps >= 1 else None
         self._interval = 1.0 / fps
         self._next_at = 0.0
+        self._count = 0
 
-    def read(self) -> np.ndarray | None:
+    def read(self) -> tuple[float, np.ndarray] | None:
+        # Every frame is decoded to stay live; only sampled ones are returned.
         while True:
             ok, bgr = self._cap.read()
             if not ok:
                 return None
+            index, self._count = self._count, self._count + 1
+            if self._step is not None:
+                if index % self._step == 0:
+                    return index / self._source_fps, self._downscale(bgr)
+                continue
             now = time.monotonic()
             if now >= self._next_at:
                 self._next_at = now + self._interval
-                return bgr
+                return now, self._downscale(bgr)
 
     def close(self) -> None:
         self._cap.release()
 
+    def _downscale(self, bgr: np.ndarray) -> np.ndarray:
+        h, w = bgr.shape[:2]
+        if w <= self._width:
+            return bgr
+        return cv2.resize(bgr, (self._width, round(h * self._width / w)), interpolation=cv2.INTER_AREA)
+
 
 def open_reader(source: str, fps: float, cfg: StreamConfig) -> FrameReader:
     """Raises OSError if the source can't be opened."""
-    if is_http_stream(source):
-        return FfmpegReader(source, fps, cfg)
-    return CvReader(source, fps)
-
-
-def _probe_size(source: str, cfg: StreamConfig) -> tuple[int, int]:
-    try:
-        out = subprocess.run(
-            [
-                cfg.ffprobe, "-v", "error", "-user_agent", cfg.user_agent,
-                "-rw_timeout", str(int(cfg.timeout_seconds * 1_000_000)),
-                "-select_streams", "v:0", "-show_entries", "stream=width,height",
-                "-of", "csv=p=0:s=x", source,
-            ],
-            capture_output=True, text=True, timeout=cfg.timeout_seconds * 2, check=True,
-        ).stdout.strip()
-        w, h = out.splitlines()[0].split("x")
-        return int(w), int(h)
-    except (OSError, subprocess.SubprocessError, ValueError, IndexError) as e:
-        raise OSError(f"could not probe {_redact(source)}: {e}") from e
-
-
-def _scaled_size(size: tuple[int, int], width: int) -> tuple[int, int]:
-    w, h = size
-    if w <= width:
-        return w - w % 2, h - h % 2
-    height = round(h * width / w)
-    return width, height - height % 2
+    return CvReader(source, fps, cfg)
 
 
 def _redact(source: str) -> str:

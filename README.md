@@ -15,7 +15,7 @@ Target: `jerrydetector.com`, eventually routed to a Jetson Orin Nano at home. Ho
 | `src/jerry/rule.py` | Crash heuristic (placeholder, to tune) |
 | `src/jerry/clip.py` | Pre/post-roll frame buffer |
 | `src/jerry/pipeline.py` | One thread per camera: read, detect, clip; idle and spot-check off hours |
-| `src/jerry/stream.py` | Frame readers: ffmpeg subprocess for HTTP/HLS, OpenCV for RTSP and files |
+| `src/jerry/stream.py` | OpenCV frame reader: sampling, downscaling, stream timestamps |
 | `src/jerry/schedule.py` | Operating hours and random spot-check timing |
 | `src/jerry/store.py` | GIF + JSON metadata writer and reader |
 | `src/jerry/web/` | FastAPI app and static page |
@@ -56,8 +56,8 @@ home NAT is a Cloudflare Tunnel, or a DNS record to your public IP with port for
 
 `config.example.yaml` has the Area Cam and Red Cam HLS feeds. Notes from probing them:
 
-- The relay answers ffmpeg's and curl's default User-Agent with `405`, and OpenCV's bundled FFmpeg can't change it. HTTP sources are therefore read through an `ffmpeg` subprocess (needs `ffmpeg` and `ffprobe` on PATH; `apt install ffmpeg` on the Jetson).
-- Both are 1080p H.264 at ~30fps, with discontinuity markers and an extra timed-ID3 stream. ffmpeg handles all of it; only the video stream is mapped, sampled to `clip.fps` and downscaled to `stream.frame_width`.
+- The relay answers the default FFmpeg/curl User-Agent with `405`. OpenCV reads the feeds fine once `OPENCV_FFMPEG_CAPTURE_OPTIONS=user_agent;...` is set. On Windows that must go through `msvcrt._putenv`, because OpenCV's FFmpeg plugin ignores `os.environ`; `stream.py` handles it.
+- Both are 1080p H.264 at ~30fps with discontinuity markers. OpenCV delivers HLS in segment-sized bursts, so frames are sampled by counting against the stream fps and timestamped by stream position, not arrival time.
 - Both cameras are PTZ and tour between presets every few seconds, so the view changes constantly. The crash rule does not account for this yet.
 
 ## Operating hours

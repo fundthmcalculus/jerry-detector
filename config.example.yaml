@@ -12,12 +12,10 @@ cameras:
   # - name: test
   #   source: rtsp://user:pass@192.168.1.50:554/stream1
 
-stream:                       # http(s) sources are read through ffmpeg (must be on PATH)
-  ffmpeg: ffmpeg
-  ffprobe: ffprobe
+stream:
   frame_width: 960            # frames are downscaled to this width before detection
   timeout_seconds: 15.0       # drop and reconnect if the network stalls this long
-  # user_agent: ...           # the relay returns 405 to ffmpeg/curl default agents
+  # user_agent: ...           # the relay returns 405 to the default ffmpeg/curl agent
 
 schedule:                     # no clips are ever saved outside these hours
   timezone: America/New_York  # follows EST/EDT

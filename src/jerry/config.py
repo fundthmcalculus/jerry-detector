@@ -39,10 +39,8 @@ class ClipConfig:
 
 @dataclass(frozen=True)
 class StreamConfig:
-    """How HTTP(S)/HLS sources are read (through an ffmpeg subprocess)."""
+    """How camera sources are read."""
 
-    ffmpeg: str = "ffmpeg"
-    ffprobe: str = "ffprobe"
     user_agent: str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
     frame_width: int = 960  # frames are downscaled to this width before detection
     timeout_seconds: float = 15.0  # network read stall limit

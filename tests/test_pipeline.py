@@ -19,7 +19,7 @@ class FakeReader:
 
     def read(self):
         self._left -= 1
-        return FRAME if self._left >= 0 else None
+        return (0.0, FRAME) if self._left >= 0 else None
 
     def close(self) -> None:
         self.closed = True
