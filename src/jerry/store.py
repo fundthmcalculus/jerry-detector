@@ -43,6 +43,11 @@ class ClipStore:
         (self.root / f"{clip_id}.json").write_text(json.dumps(meta))
         return meta
 
+    def log_off_hours(self, record: dict) -> None:
+        """Append activity seen outside operating hours to off_hours.jsonl (not served as a clip)."""
+        with (self.root / "off_hours.jsonl").open("a") as f:
+            f.write(json.dumps(record) + "\n")
+
     def list(self) -> list[dict]:
         metas = [json.loads(p.read_text()) for p in self.root.glob("*.json")]
         return sorted(metas, key=lambda m: m["created"], reverse=True)

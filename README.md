@@ -14,7 +14,9 @@ Target: `jerrydetector.com`, eventually routed to a Jetson Orin Nano at home. Ho
 | `src/jerry/detect.py` | Person detector interface + YOLO pose backend |
 | `src/jerry/rule.py` | Crash heuristic (placeholder, to tune) |
 | `src/jerry/clip.py` | Pre/post-roll frame buffer |
-| `src/jerry/pipeline.py` | One thread per camera: read, detect, clip |
+| `src/jerry/pipeline.py` | One thread per camera: read, detect, clip; idle and spot-check off hours |
+| `src/jerry/stream.py` | OpenCV frame reader: sampling, downscaling, stream timestamps |
+| `src/jerry/schedule.py` | Operating hours and random spot-check timing |
 | `src/jerry/store.py` | GIF + JSON metadata writer and reader |
 | `src/jerry/web/` | FastAPI app and static page |
 | `src/jerry/cli.py` | `jerry run` and `jerry serve` |
@@ -49,3 +51,15 @@ home NAT is a Cloudflare Tunnel, or a DNS record to your public IP with port for
 - Tune the crash rule on real footage. It uses the largest person's box shape only.
 - Add a pose-based check (hip and shoulder keypoints) if box shape is too noisy.
 - Subscriptions and email/push notifications with the GIF attached.
+
+## Perfect North streams
+
+`config.example.yaml` has the Area Cam and Red Cam HLS feeds. Notes from probing them:
+
+- The relay answers the default FFmpeg/curl User-Agent with `405`. OpenCV reads the feeds fine once `OPENCV_FFMPEG_CAPTURE_OPTIONS=user_agent;...` is set. On Windows that must go through `msvcrt._putenv`, because OpenCV's FFmpeg plugin ignores `os.environ`; `stream.py` handles it.
+- Both are 1080p H.264 at ~30fps with discontinuity markers. OpenCV delivers HLS in segment-sized bursts, so frames are sampled by counting against the stream fps and timestamped by stream position, not arrival time.
+- Both cameras are PTZ and tour between presets every few seconds, so the view changes constantly. The crash rule does not account for this yet.
+
+## Operating hours
+
+`schedule:` sets open/close in `America/New_York` (EST/EDT). Outside the window no clip is ever saved and no stream is held open. At random 20-60 minute intervals each camera takes a 15 s spot check; if the person detector sees anyone, it logs a warning and appends to `clips/off_hours.jsonl`. Motion differencing was tried and dropped because camera tours trigger it.

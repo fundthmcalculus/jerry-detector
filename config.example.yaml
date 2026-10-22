@@ -1,9 +1,29 @@
 # Copy to config.yaml (gitignored) and edit.
 
 cameras:
-  - name: north-bowl
-    source: rtsp://user:pass@192.168.1.50:554/stream1   # RTSP, HTTP/MJPEG, or a video file path
+  # Perfect North feeds (HLS). Camera names become clip ids: letters, digits, - and _ only.
+  - name: area-cam
+    source: https://b15.hdrelay.com/camera/339bc87e-5059-4d09-9950-4f9f6f3e588e/relay/playlist.m3u8
     enabled: true
+  - name: red-cam
+    source: https://b15.hdrelay.com/camera/3c07ea8c-8050-4b02-bdd5-64b66ed7b82a/relay/playlist.m3u8
+    enabled: true
+  # RTSP and local video files also work (read with OpenCV):
+  # - name: test
+  #   source: rtsp://user:pass@192.168.1.50:554/stream1
+
+stream:
+  frame_width: 960            # frames are downscaled to this width before detection
+  timeout_seconds: 15.0       # drop and reconnect if the network stalls this long
+  # user_agent: ...           # the relay returns 405 to the default ffmpeg/curl agent
+
+schedule:                     # no clips are ever saved outside these hours
+  timezone: America/New_York  # follows EST/EDT
+  open: "09:30"
+  close: "21:30"              # set equal to open for 24h; close < open wraps past midnight
+  spot_check_min_minutes: 20  # while closed, a random check every 20-60 min
+  spot_check_max_minutes: 60
+  spot_check_seconds: 15
 
 detector:
   backend: yolo_pose          # yolo_pose | none

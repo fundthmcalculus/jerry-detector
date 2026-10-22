@@ -38,8 +38,31 @@ class ClipConfig:
 
 
 @dataclass(frozen=True)
+class StreamConfig:
+    """How camera sources are read."""
+
+    user_agent: str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
+    frame_width: int = 960  # frames are downscaled to this width before detection
+    timeout_seconds: float = 15.0  # network read stall limit
+
+
+@dataclass(frozen=True)
+class ScheduleConfig:
+    """Operating hours, in `timezone` wall-clock. Outside them no clips are ever saved."""
+
+    timezone: str = "America/New_York"
+    open: str = "09:30"
+    close: str = "21:30"
+    spot_check_min_minutes: float = 20.0  # random gap between off-hours spot checks
+    spot_check_max_minutes: float = 60.0
+    spot_check_seconds: float = 15.0
+
+
+@dataclass(frozen=True)
 class Config:
     cameras: list[CameraConfig] = field(default_factory=list)
+    stream: StreamConfig = field(default_factory=StreamConfig)
+    schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     detector: DetectorConfig = field(default_factory=DetectorConfig)
     rule: RuleConfig = field(default_factory=RuleConfig)
     clip: ClipConfig = field(default_factory=ClipConfig)
@@ -52,6 +75,8 @@ def load_config(path: str | Path) -> Config:
         clip["output_dir"] = Path(clip["output_dir"])
     return Config(
         cameras=[CameraConfig(**c) for c in raw.get("cameras", [])],
+        stream=StreamConfig(**raw.get("stream", {})),
+        schedule=ScheduleConfig(**raw.get("schedule", {})),
         detector=DetectorConfig(**raw.get("detector", {})),
         rule=RuleConfig(**raw.get("rule", {})),
         clip=ClipConfig(**clip),

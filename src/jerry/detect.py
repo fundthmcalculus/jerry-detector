@@ -58,7 +58,16 @@ class YoloPoseDetector:
         ]
 
 
+class NullDetector:
+    """Detects nothing: for exercising stream, schedule and motion checks without a model."""
+
+    def detect(self, frame: np.ndarray) -> list[Person]:
+        return []
+
+
 def make_detector(cfg: DetectorConfig) -> PersonDetector:
+    if cfg.backend == "none":
+        return NullDetector()
     if cfg.backend == "yolo_pose":
         return YoloPoseDetector(cfg.model, cfg.device, cfg.confidence)
     raise ValueError(f"unknown detector backend: {cfg.backend!r}")
