@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jerry-detector"
+version = "0.1.0"
+description = "Detects crashing skiers on north-facing webcam feeds and saves them as GIFs."
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "pillow>=10.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Local person detector. On Jetson, install JetPack's torch/opencv first, then this.
+ml = ["ultralytics>=8.3"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+jerry = "jerry.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"jerry.web" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
